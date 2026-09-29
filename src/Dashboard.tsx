@@ -41,7 +41,7 @@ function Dashboard({ customerName }: DashboardProps) {
       setError("");
 
       const response = await fetch(
-        "http://localhost:5001/api/bookings"
+        "https://san-task8-service-booking.onrender.com"
       );
 
       if (!response.ok) {
