@@ -1,14 +1,13 @@
+
 const express = require("express");
 const cors = require("cors");
 const pool = require("./db");
 
 const app = express();
-
 const PORT = process.env.PORT || 5001;
 
 app.use(cors());
 app.use(express.json());
-
 
 // ==========================================
 // HOME
@@ -20,7 +19,6 @@ app.get("/", (req, res) => {
   });
 });
 
-
 // ==========================================
 // HEALTH CHECK
 // ==========================================
@@ -31,7 +29,6 @@ app.get("/api/health", (req, res) => {
     message: "Backend is healthy",
   });
 });
-
 
 // ==========================================
 // DATABASE TEST
@@ -55,7 +52,6 @@ app.get("/api/db-test", async (req, res) => {
     });
   }
 });
-
 
 // ==========================================
 // CREATE BOOKING
@@ -123,15 +119,24 @@ app.post("/api/bookings", async (req, res) => {
   }
 });
 
-
 // ==========================================
 // GET ALL BOOKINGS
+// PRIVATE DETAILS ARE NOT INCLUDED
 // ==========================================
 
 app.get("/api/bookings", async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT * FROM bookings ORDER BY created_at DESC"
+      `SELECT
+        id,
+        customer_name,
+        service,
+        booking_date,
+        booking_time,
+        status,
+        created_at
+       FROM bookings
+       ORDER BY created_at DESC`
     );
 
     res.json({
@@ -147,7 +152,6 @@ app.get("/api/bookings", async (req, res) => {
     });
   }
 });
-
 
 // ==========================================
 // UPDATE BOOKING STATUS
@@ -203,7 +207,6 @@ app.put("/api/bookings/:id/status", async (req, res) => {
   }
 });
 
-
 // ==========================================
 // DELETE BOOKING
 // ==========================================
@@ -240,7 +243,6 @@ app.delete("/api/bookings/:id", async (req, res) => {
     });
   }
 });
-
 
 // ==========================================
 // START SERVER
