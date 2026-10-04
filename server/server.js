@@ -1,63 +1,228 @@
+require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 const pool = require("./db");
+const auth = require("./middleware/auth");
 
 const app = express();
 const PORT = process.env.PORT || 5001;
 
+// Middleware
 app.use(cors());
 app.use(express.json());
 
-// ==========================================
-// HOME
-// ==========================================
-
+// Home route
 app.get("/", (req, res) => {
   res.json({
-    message: "Service Booking API is running",
+    message: "Service Booking API is running"
   });
 });
 
-// ==========================================
-// HEALTH CHECK
-// ==========================================
-
+// Health check
 app.get("/api/health", (req, res) => {
   res.json({
     status: "OK",
-    message: "Backend is healthy",
+    message: "Server is running"
   });
 });
 
-// ==========================================
-// DATABASE TEST
-// ==========================================
-
+// Database connection test
 app.get("/api/db-test", async (req, res) => {
   try {
-    const result = await pool.query("SELECT NOW()");
+    const result = await pool.query("SELECT NOW() AS time");
 
     res.json({
       status: "OK",
       message: "Database connected successfully",
-      time: result.rows[0].now,
+      time: result.rows[0].time
     });
   } catch (error) {
-    console.error(error);
+    console.error("Database test error:", error);
 
     res.status(500).json({
       status: "ERROR",
-      message: "Database connection failed",
+      message: "Database connection failed"
     });
   }
 });
 
-// ==========================================
-// CREATE BOOKING
-// ==========================================
+// Check database and users table
+app.get("/api/check-users-table", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        current_database() AS database,
+        current_schema() AS schema,
+        to_regclass('public.users') AS users_table
+    `);
 
-app.post("/api/bookings", async (req, res) => {
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error("Users table check error:", error);
+
+    res.status(500).json({
+      status: "ERROR",
+      message: "Database check failed"
+    });
+  }
+});
+
+// Register user
+app.post("/api/auth/register", async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+
+    if (
+      typeof name !== "string" ||
+      typeof email !== "string" ||
+      typeof password !== "string" ||
+      !name.trim() ||
+      !email.trim() ||
+      !password
+    ) {
+      return res.status(400).json({
+        status: "ERROR",
+        message: "Name, email and password are required"
+      });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({
+        status: "ERROR",
+        message: "Password must be at least 8 characters long"
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const existingUser = await pool.query(
+      "SELECT id FROM public.users WHERE email = $1",
+      [normalizedEmail]
+    );
+
+    if (existingUser.rows.length > 0) {
+      return res.status(409).json({
+        status: "ERROR",
+        message: "Email is already registered"
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    const result = await pool.query(
+      `INSERT INTO public.users (name, email, password)
+       VALUES ($1, $2, $3)
+       RETURNING id, name, email, created_at`,
+      [name.trim(), normalizedEmail, hashedPassword]
+    );
+
+    res.status(201).json({
+      status: "SUCCESS",
+      message: "User registered successfully",
+      user: result.rows[0]
+    });
+  } catch (error) {
+    console.error("Registration error:", error);
+
+    res.status(500).json({
+      status: "ERROR",
+      message: "Registration failed"
+    });
+  }
+});
+
+// Login user
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (
+      typeof email !== "string" ||
+      typeof password !== "string" ||
+      !email.trim() ||
+      !password
+    ) {
+      return res.status(400).json({
+        status: "ERROR",
+        message: "Email and password are required"
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const result = await pool.query(
+      `SELECT id, name, email, password
+       FROM public.users
+       WHERE email = $1`,
+      [normalizedEmail]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({
+        status: "ERROR",
+        message: "Invalid email or password"
+      });
+    }
+
+    const user = result.rows[0];
+
+    const passwordMatch = await bcrypt.compare(
+      password,
+      user.password
+    );
+
+    if (!passwordMatch) {
+      return res.status(401).json({
+        status: "ERROR",
+        message: "Invalid email or password"
+      });
+    }
+
+    if (!process.env.JWT_SECRET) {
+      console.error("JWT_SECRET is missing");
+
+      return res.status(500).json({
+        status: "ERROR",
+        message: "Authentication is not configured"
+      });
+    }
+
+    const token = jwt.sign(
+      {
+        id: user.id,
+        email: user.email
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "2h"
+      }
+    );
+
+    res.json({
+      status: "SUCCESS",
+      message: "Login successful",
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email
+      }
+    });
+  } catch (error) {
+    console.error("Login error:", error);
+
+    res.status(500).json({
+      status: "ERROR",
+      message: "Login failed"
+    });
+  }
+});
+
+// Create a booking (login required)
+app.post("/api/bookings", auth, async (req, res) => {
   try {
     const {
       customer_name,
@@ -65,7 +230,7 @@ app.post("/api/bookings", async (req, res) => {
       service,
       booking_date,
       booking_time,
-      address,
+      address
     } = req.body;
 
     if (
@@ -78,86 +243,67 @@ app.post("/api/bookings", async (req, res) => {
     ) {
       return res.status(400).json({
         status: "ERROR",
-        message: "All booking fields are required",
+        message: "Please provide all booking details"
       });
     }
 
     const result = await pool.query(
       `INSERT INTO bookings
-      (
-        customer_name,
-        phone,
-        service,
-        booking_date,
-        booking_time,
-        address
-      )
-      VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING *`,
+       (customer_name, phone, service, booking_date, booking_time, address)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, customer_name, service, booking_date,
+                 booking_time, status, created_at`,
       [
         customer_name,
         phone,
         service,
         booking_date,
         booking_time,
-        address,
+        address
       ]
     );
 
     res.status(201).json({
-      status: "OK",
+      status: "SUCCESS",
       message: "Booking created successfully",
-      booking: result.rows[0],
+      booking: result.rows[0]
     });
   } catch (error) {
-    console.error(error);
+    console.error("Create booking error:", error);
 
     res.status(500).json({
       status: "ERROR",
-      message: "Failed to create booking",
+      message: "Failed to create booking"
     });
   }
 });
 
-// ==========================================
-// GET ALL BOOKINGS
-// PRIVATE DETAILS ARE NOT INCLUDED
-// ==========================================
-
-app.get("/api/bookings", async (req, res) => {
+// Get bookings (login required)
+app.get("/api/bookings", auth, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT
-        id,
-        customer_name,
-        service,
-        booking_date,
-        booking_time,
-        status,
-        created_at
+      `SELECT id, customer_name, service, booking_date,
+              booking_time, status, created_at
        FROM bookings
        ORDER BY created_at DESC`
     );
 
     res.json({
-      status: "OK",
-      bookings: result.rows,
+      status: "SUCCESS",
+      bookings: result.rows
     });
   } catch (error) {
-    console.error(error);
+    console.error("Get bookings error:", error);
 
     res.status(500).json({
       status: "ERROR",
-      message: "Failed to fetch bookings",
+      message: "Failed to fetch bookings"
     });
   }
 });
 
-// ==========================================
-// UPDATE BOOKING STATUS
-// ==========================================
-
-app.put("/api/bookings/:id/status", async (req, res) => {
+// Update booking status (login required)
+app.put("/api/bookings/:id/status", auth, async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -166,14 +312,20 @@ app.put("/api/bookings/:id/status", async (req, res) => {
       "Pending",
       "Confirmed",
       "Completed",
-      "Cancelled",
+      "Cancelled"
     ];
+
+    if (!Number.isInteger(Number(id)) || Number(id) <= 0) {
+      return res.status(400).json({
+        status: "ERROR",
+        message: "Invalid booking ID"
+      });
+    }
 
     if (!allowedStatuses.includes(status)) {
       return res.status(400).json({
         status: "ERROR",
-        message:
-          "Invalid status. Allowed values are Pending, Confirmed, Completed, Cancelled",
+        message: "Invalid booking status"
       });
     }
 
@@ -181,73 +333,76 @@ app.put("/api/bookings/:id/status", async (req, res) => {
       `UPDATE bookings
        SET status = $1
        WHERE id = $2
-       RETURNING *`,
-      [status, id]
+       RETURNING id, customer_name, service, booking_date,
+                 booking_time, status, created_at`,
+      [status, Number(id)]
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({
         status: "ERROR",
-        message: "Booking not found",
+        message: "Booking not found"
       });
     }
 
     res.json({
-      status: "OK",
-      message: "Booking status updated successfully",
-      booking: result.rows[0],
+      status: "SUCCESS",
+      message: "Booking status updated",
+      booking: result.rows[0]
     });
   } catch (error) {
-    console.error(error);
+    console.error("Update booking error:", error);
 
     res.status(500).json({
       status: "ERROR",
-      message: "Failed to update booking status",
+      message: "Failed to update booking status"
     });
   }
 });
 
-// ==========================================
-// DELETE BOOKING
-// ==========================================
-
-app.delete("/api/bookings/:id", async (req, res) => {
+// Delete booking (login required)
+app.delete("/api/bookings/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
+
+    if (!Number.isInteger(Number(id)) || Number(id) <= 0) {
+      return res.status(400).json({
+        status: "ERROR",
+        message: "Invalid booking ID"
+      });
+    }
 
     const result = await pool.query(
       `DELETE FROM bookings
        WHERE id = $1
-       RETURNING *`,
-      [id]
+       RETURNING id, customer_name, service, booking_date,
+                 booking_time, status, created_at`,
+      [Number(id)]
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({
         status: "ERROR",
-        message: "Booking not found",
+        message: "Booking not found"
       });
     }
 
     res.json({
-      status: "OK",
+      status: "SUCCESS",
       message: "Booking deleted successfully",
-      booking: result.rows[0],
+      booking: result.rows[0]
     });
   } catch (error) {
-    console.error(error);
+    console.error("Delete booking error:", error);
 
     res.status(500).json({
       status: "ERROR",
-      message: "Failed to delete booking",
+      message: "Failed to delete booking"
     });
   }
 });
 
-// ==========================================
-// START SERVER
-// ==========================================
-
+// Start server
 app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+  console.log(`Server is running on port ${PORT}`);
 });

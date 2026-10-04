@@ -100,7 +100,7 @@ function App() {
 
     try {
       const response = await fetch(
-        "https://san-task8-service-booking.onrender.com",
+        "https://san-task8-service-booking.onrender.com/api/bookings",
         {
           method: "POST",
           headers: {
@@ -286,14 +286,6 @@ function App() {
 
             <p>
               <strong>Name:</strong> {name}
-            </p>
-
-            <p>
-              <strong>Phone:</strong> {phone}
-            </p>
-
-            <p>
-              <strong>Address:</strong> {address}
             </p>
 
             <p>

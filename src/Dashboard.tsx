@@ -16,6 +16,9 @@ interface Booking {
   created_at?: string;
 }
 
+const API_URL =
+  "https://san-task8-service-booking.onrender.com/api/bookings";
+
 const services = [
   "Home Cleaning",
   "Computer Repair",
@@ -24,25 +27,18 @@ const services = [
 ];
 
 function Dashboard({ customerName }: DashboardProps) {
-  const displayName =
-    customerName.trim() || "Customer";
+  const displayName = customerName.trim() || "Customer";
 
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    fetchBookings();
-  }, []);
 
   async function fetchBookings() {
     try {
       setLoading(true);
       setError("");
 
-      const response = await fetch(
-        "https://san-task8-service-booking.onrender.com"
-      );
+      const response = await fetch(API_URL);
 
       if (!response.ok) {
         throw new Error("Failed to fetch bookings");
@@ -50,16 +46,24 @@ function Dashboard({ customerName }: DashboardProps) {
 
       const data = await response.json();
 
-      setBookings(data.bookings || []);
+      if (data.status !== "OK" || !Array.isArray(data.bookings)) {
+        throw new Error("Invalid booking response");
+      }
+
+      setBookings(data.bookings);
     } catch (err) {
-      console.error(err);
+      console.error("Booking fetch error:", err);
       setError(
-        "Unable to load booking data. Please make sure the backend is running."
+        "Unable to load booking data. Please try refreshing."
       );
     } finally {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    fetchBookings();
+  }, []);
 
   const totalBookings = bookings.length;
 
@@ -72,7 +76,17 @@ function Dashboard({ customerName }: DashboardProps) {
   ).length;
 
   const upcomingBooking =
-    bookings.length > 0 ? bookings[0] : null;
+    bookings.length > 0
+      ? [...bookings].sort((a, b) => {
+          const dateA = new Date(
+            `${a.booking_date.slice(0, 10)}T${a.booking_time}`
+          ).getTime();
+          const dateB = new Date(
+            `${b.booking_date.slice(0, 10)}T${b.booking_time}`
+          ).getTime();
+          return dateA - dateB;
+        })[0]
+      : null;
 
   const recentBookings = bookings.slice(0, 5);
 
@@ -89,6 +103,7 @@ function Dashboard({ customerName }: DashboardProps) {
       day: "2-digit",
       month: "short",
       year: "numeric",
+      timeZone: "UTC",
     });
   }
 
@@ -97,20 +112,14 @@ function Dashboard({ customerName }: DashboardProps) {
 
     const parts = timeString.split(":");
 
-    if (parts.length < 2) {
-      return timeString;
-    }
+    if (parts.length < 2) return timeString;
 
     let hours = Number(parts[0]);
     const minutes = parts[1];
-
     const modifier = hours >= 12 ? "PM" : "AM";
 
     hours = hours % 12;
-
-    if (hours === 0) {
-      hours = 12;
-    }
+    if (hours === 0) hours = 12;
 
     return `${hours}:${minutes} ${modifier}`;
   }
@@ -119,16 +128,12 @@ function Dashboard({ customerName }: DashboardProps) {
     switch (service) {
       case "Home Cleaning":
         return "🧹";
-
       case "Computer Repair":
         return "💻";
-
       case "Car Wash":
         return "🚗";
-
       case "Haircut":
         return "✂️";
-
       default:
         return "🛠️";
     }
@@ -138,14 +143,10 @@ function Dashboard({ customerName }: DashboardProps) {
     switch (status) {
       case "Completed":
         return "#166534";
-
       case "Confirmed":
         return "#1d4ed8";
-
       case "Cancelled":
         return "#b91c1c";
-
-      case "Pending":
       default:
         return "#92400e";
     }
@@ -155,14 +156,10 @@ function Dashboard({ customerName }: DashboardProps) {
     switch (status) {
       case "Completed":
         return "#dcfce7";
-
       case "Confirmed":
         return "#dbeafe";
-
       case "Cancelled":
         return "#fee2e2";
-
-      case "Pending":
       default:
         return "#fef3c7";
     }
@@ -178,18 +175,11 @@ function Dashboard({ customerName }: DashboardProps) {
         color: "#0f172a",
       }}
     >
-      <div
-        style={{
-          maxWidth: "1200px",
-          margin: "0 auto",
-        }}
-      >
+      <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
         {/* WELCOME HEADER */}
-
         <section
           style={{
-            background:
-              "linear-gradient(135deg, #0f172a, #1d4ed8)",
+            background: "linear-gradient(135deg, #0f172a, #1d4ed8)",
             color: "white",
             borderRadius: "20px",
             padding: "35px",
@@ -198,8 +188,7 @@ function Dashboard({ customerName }: DashboardProps) {
             alignItems: "center",
             gap: "25px",
             flexWrap: "wrap",
-            boxShadow:
-              "0 12px 35px rgba(15, 23, 42, 0.15)",
+            boxShadow: "0 12px 35px rgba(15, 23, 42, 0.15)",
           }}
         >
           <div>
@@ -214,8 +203,6 @@ function Dashboard({ customerName }: DashboardProps) {
             >
               SERVICE BOOKING DASHBOARD
             </p>
-
-            {/* FIXED TITLE COLOR */}
 
             <h1
               style={{
@@ -234,8 +221,7 @@ function Dashboard({ customerName }: DashboardProps) {
                 fontSize: "16px",
               }}
             >
-              Manage your services and bookings from one
-              place.
+              Manage your services and bookings from one place.
             </p>
           </div>
 
@@ -248,24 +234,12 @@ function Dashboard({ customerName }: DashboardProps) {
               minWidth: "190px",
             }}
           >
-            <div
-              style={{
-                fontSize: "30px",
-                marginBottom: "8px",
-              }}
-            >
+            <div style={{ fontSize: "30px", marginBottom: "8px" }}>
               📅
             </div>
-
-            <div
-              style={{
-                fontSize: "13px",
-                color: "#bfdbfe",
-              }}
-            >
+            <div style={{ fontSize: "13px", color: "#bfdbfe" }}>
               Next Booking
             </div>
-
             <strong
               style={{
                 display: "block",
@@ -280,8 +254,7 @@ function Dashboard({ customerName }: DashboardProps) {
           </div>
         </section>
 
-        {/* ERROR */}
-
+        {/* ERROR MESSAGE */}
         {error && (
           <div
             style={{
@@ -298,12 +271,10 @@ function Dashboard({ customerName }: DashboardProps) {
         )}
 
         {/* STATISTICS */}
-
         <section
           style={{
             display: "grid",
-            gridTemplateColumns:
-              "repeat(auto-fit, minmax(200px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
             gap: "18px",
             marginTop: "25px",
           }}
@@ -311,33 +282,21 @@ function Dashboard({ customerName }: DashboardProps) {
           <StatCard
             icon="📋"
             title="Total Bookings"
-            value={
-              loading
-                ? "..."
-                : String(totalBookings)
-            }
+            value={loading ? "..." : String(totalBookings)}
             subtitle="All bookings"
           />
 
           <StatCard
             icon="⏳"
             title="Pending"
-            value={
-              loading
-                ? "..."
-                : String(pendingBookings)
-            }
+            value={loading ? "..." : String(pendingBookings)}
             subtitle="Awaiting service"
           />
 
           <StatCard
             icon="✅"
             title="Completed"
-            value={
-              loading
-                ? "..."
-                : String(completedBookings)
-            }
+            value={loading ? "..." : String(completedBookings)}
             subtitle="Successfully completed"
           />
 
@@ -350,28 +309,21 @@ function Dashboard({ customerName }: DashboardProps) {
         </section>
 
         {/* MAIN GRID */}
-
         <div
           style={{
             display: "grid",
-            gridTemplateColumns:
-              "minmax(0, 2fr) minmax(280px, 1fr)",
+            gridTemplateColumns: "minmax(0, 2fr) minmax(280px, 1fr)",
             gap: "25px",
             marginTop: "25px",
           }}
         >
-          {/* LEFT */}
-
+          {/* LEFT COLUMN */}
           <div>
             {/* UPCOMING BOOKING */}
-
             <section style={cardStyle}>
               <div style={sectionHeaderStyle}>
                 <div>
-                  <h2 style={headingStyle}>
-                    Upcoming Booking
-                  </h2>
-
+                  <h2 style={headingStyle}>Upcoming Booking</h2>
                   <p style={mutedStyle}>
                     Your next scheduled service
                   </p>
@@ -380,14 +332,10 @@ function Dashboard({ customerName }: DashboardProps) {
                 {upcomingBooking && (
                   <span
                     style={{
-                      background:
-                        getStatusBackground(
-                          upcomingBooking.status
-                        ),
-                      color:
-                        getStatusColor(
-                          upcomingBooking.status
-                        ),
+                      background: getStatusBackground(
+                        upcomingBooking.status
+                      ),
+                      color: getStatusColor(upcomingBooking.status),
                       padding: "7px 12px",
                       borderRadius: "20px",
                       fontSize: "12px",
@@ -400,16 +348,7 @@ function Dashboard({ customerName }: DashboardProps) {
               </div>
 
               {loading ? (
-                <div
-                  style={{
-                    marginTop: "22px",
-                    padding: "30px",
-                    textAlign: "center",
-                    color: "#64748b",
-                  }}
-                >
-                  Loading booking...
-                </div>
+                <div style={emptyStyle}>Loading booking...</div>
               ) : upcomingBooking ? (
                 <div
                   style={{
@@ -427,33 +366,14 @@ function Dashboard({ customerName }: DashboardProps) {
                       gap: "15px",
                     }}
                   >
-                    <div
-                      style={{
-                        width: "55px",
-                        height: "55px",
-                        borderRadius: "14px",
-                        background: "#eff6ff",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: "27px",
-                      }}
-                    >
-                      {getServiceIcon(
-                        upcomingBooking.service
-                      )}
+                    <div style={serviceIconStyle}>
+                      {getServiceIcon(upcomingBooking.service)}
                     </div>
 
                     <div>
-                      <h3
-                        style={{
-                          margin: 0,
-                          fontSize: "19px",
-                        }}
-                      >
+                      <h3 style={{ margin: 0, fontSize: "19px" }}>
                         {upcomingBooking.service}
                       </h3>
-
                       <p
                         style={{
                           margin: "5px 0 0",
@@ -477,46 +397,26 @@ function Dashboard({ customerName }: DashboardProps) {
                     <InfoBox
                       icon="📅"
                       label="Date"
-                      value={formatDate(
-                        upcomingBooking.booking_date
-                      )}
+                      value={formatDate(upcomingBooking.booking_date)}
                     />
-
                     <InfoBox
                       icon="🕐"
                       label="Time"
-                      value={formatTime(
-                        upcomingBooking.booking_time
-                      )}
+                      value={formatTime(upcomingBooking.booking_time)}
                     />
-
                     <InfoBox
                       icon="📍"
                       label="Address"
-                      value={
-                        upcomingBooking.address
-                      }
+                      value={upcomingBooking.address}
                     />
                   </div>
                 </div>
               ) : (
-                <div
-                  style={{
-                    marginTop: "22px",
-                    padding: "30px",
-                    textAlign: "center",
-                    background: "#f8fafc",
-                    borderRadius: "14px",
-                    color: "#64748b",
-                  }}
-                >
-                  No bookings available.
-                </div>
+                <div style={emptyStyle}>No bookings available.</div>
               )}
             </section>
 
             {/* RECENT BOOKINGS */}
-
             <section
               style={{
                 ...cardStyle,
@@ -525,27 +425,13 @@ function Dashboard({ customerName }: DashboardProps) {
             >
               <div style={sectionHeaderStyle}>
                 <div>
-                  <h2 style={headingStyle}>
-                    Recent Bookings
-                  </h2>
-
+                  <h2 style={headingStyle}>Recent Bookings</h2>
                   <p style={mutedStyle}>
                     Your latest service activity
                   </p>
                 </div>
 
-                <button
-                  onClick={fetchBookings}
-                  style={{
-                    background: "#eff6ff",
-                    color: "#2563eb",
-                    border: "none",
-                    padding: "9px 14px",
-                    borderRadius: "8px",
-                    fontWeight: "bold",
-                    cursor: "pointer",
-                  }}
-                >
+                <button onClick={fetchBookings} style={refreshButtonStyle}>
                   Refresh
                 </button>
               </div>
@@ -558,64 +444,39 @@ function Dashboard({ customerName }: DashboardProps) {
                 }}
               >
                 {loading ? (
-                  <p
-                    style={{
-                      color: "#64748b",
-                    }}
-                  >
+                  <p style={{ color: "#64748b" }}>
                     Loading bookings...
                   </p>
                 ) : recentBookings.length === 0 ? (
-                  <p
-                    style={{
-                      color: "#64748b",
-                    }}
-                  >
+                  <p style={{ color: "#64748b" }}>
                     No bookings found.
                   </p>
                 ) : (
-                  recentBookings.map(
-                    (booking) => (
-                      <BookingRow
-                        key={booking.id}
-                        icon={getServiceIcon(
-                          booking.service
-                        )}
-                        service={booking.service}
-                        date={formatDate(
-                          booking.booking_date
-                        )}
-                        time={formatTime(
-                          booking.booking_time
-                        )}
-                        status={booking.status}
-                        statusColor={getStatusColor(
-                          booking.status
-                        )}
-                        statusBackground={getStatusBackground(
-                          booking.status
-                        )}
-                      />
-                    )
-                  )
+                  recentBookings.map((booking) => (
+                    <BookingRow
+                      key={booking.id}
+                      icon={getServiceIcon(booking.service)}
+                      service={booking.service}
+                      date={formatDate(booking.booking_date)}
+                      time={formatTime(booking.booking_time)}
+                      status={booking.status}
+                      statusColor={getStatusColor(booking.status)}
+                      statusBackground={getStatusBackground(
+                        booking.status
+                      )}
+                    />
+                  ))
                 )}
               </div>
             </section>
           </div>
 
-          {/* RIGHT */}
-
+          {/* RIGHT COLUMN */}
           <div>
             {/* QUICK ACTIONS */}
-
             <section style={cardStyle}>
-              <h2 style={headingStyle}>
-                Quick Actions
-              </h2>
-
-              <p style={mutedStyle}>
-                Get things done quickly
-              </p>
+              <h2 style={headingStyle}>Quick Actions</h2>
+              <p style={mutedStyle}>Get things done quickly</p>
 
               <div
                 style={{
@@ -630,13 +491,11 @@ function Dashboard({ customerName }: DashboardProps) {
                   subtitle="Create a new booking"
                   primary
                 />
-
                 <ActionButton
                   icon="📋"
                   title="My Bookings"
                   subtitle="View booking history"
                 />
-
                 <ActionButton
                   icon="🛠️"
                   title="Available Services"
@@ -646,7 +505,6 @@ function Dashboard({ customerName }: DashboardProps) {
             </section>
 
             {/* NOTIFICATIONS */}
-
             <section
               style={{
                 ...cardStyle,
@@ -654,10 +512,7 @@ function Dashboard({ customerName }: DashboardProps) {
               }}
             >
               <div style={sectionHeaderStyle}>
-                <h2 style={headingStyle}>
-                  Notifications
-                </h2>
-
+                <h2 style={headingStyle}>Notifications</h2>
                 <span
                   style={{
                     background: "#fee2e2",
@@ -707,17 +562,14 @@ function Dashboard({ customerName }: DashboardProps) {
               </div>
             </section>
 
-            {/* PROFILE */}
-
+            {/* CUSTOMER PROFILE */}
             <section
               style={{
                 ...cardStyle,
                 marginTop: "25px",
               }}
             >
-              <h2 style={headingStyle}>
-                Customer Profile
-              </h2>
+              <h2 style={headingStyle}>Customer Profile</h2>
 
               <div
                 style={{
@@ -742,20 +594,13 @@ function Dashboard({ customerName }: DashboardProps) {
                     fontWeight: "bold",
                   }}
                 >
-                  {displayName
-                    .charAt(0)
-                    .toUpperCase()}
+                  {displayName.charAt(0).toUpperCase()}
                 </div>
 
                 <div>
-                  <strong
-                    style={{
-                      fontSize: "17px",
-                    }}
-                  >
+                  <strong style={{ fontSize: "17px" }}>
                     {displayName}
                   </strong>
-
                   <p
                     style={{
                       margin: "5px 0 0",
@@ -779,24 +624,20 @@ function Dashboard({ customerName }: DashboardProps) {
                 }}
               >
                 👤 Regular customer
-                <br />
-
                 <span
                   style={{
                     display: "block",
                     marginTop: "8px",
                   }}
                 >
-                  ⭐ {totalBookings} total
-                  bookings
+                  ⭐ {totalBookings} total bookings
                 </span>
               </div>
             </section>
           </div>
         </div>
 
-        {/* ACTIVITY */}
-
+        {/* BOOKING ACTIVITY */}
         <section
           style={{
             ...cardStyle,
@@ -805,10 +646,7 @@ function Dashboard({ customerName }: DashboardProps) {
         >
           <div style={sectionHeaderStyle}>
             <div>
-              <h2 style={headingStyle}>
-                Booking Activity
-              </h2>
-
+              <h2 style={headingStyle}>Booking Activity</h2>
               <p style={mutedStyle}>
                 Your service activity overview
               </p>
@@ -828,55 +666,20 @@ function Dashboard({ customerName }: DashboardProps) {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns:
-                "repeat(7, 1fr)",
+              gridTemplateColumns: "repeat(7, 1fr)",
               gap: "10px",
               alignItems: "end",
               height: "170px",
               marginTop: "30px",
             }}
           >
-            <ActivityBar
-              day="Mon"
-              height="45%"
-              value="2"
-            />
-
-            <ActivityBar
-              day="Tue"
-              height="70%"
-              value="4"
-            />
-
-            <ActivityBar
-              day="Wed"
-              height="35%"
-              value="1"
-            />
-
-            <ActivityBar
-              day="Thu"
-              height="85%"
-              value="5"
-            />
-
-            <ActivityBar
-              day="Fri"
-              height="55%"
-              value="3"
-            />
-
-            <ActivityBar
-              day="Sat"
-              height="95%"
-              value="6"
-            />
-
-            <ActivityBar
-              day="Sun"
-              height="40%"
-              value="2"
-            />
+            <ActivityBar day="Mon" height="45%" value="2" />
+            <ActivityBar day="Tue" height="70%" value="4" />
+            <ActivityBar day="Wed" height="35%" value="1" />
+            <ActivityBar day="Thu" height="85%" value="5" />
+            <ActivityBar day="Fri" height="55%" value="3" />
+            <ActivityBar day="Sat" height="95%" value="6" />
+            <ActivityBar day="Sun" height="40%" value="2" />
           </div>
         </section>
 
@@ -889,8 +692,7 @@ function Dashboard({ customerName }: DashboardProps) {
           }}
         >
           <p>
-            ✨ Making service booking simple, fast
-            and convenient.
+            ✨ Making service booking simple, fast and convenient.
           </p>
         </div>
       </div>
@@ -898,15 +700,14 @@ function Dashboard({ customerName }: DashboardProps) {
   );
 }
 
-/* CARD STYLE */
+/* COMMON STYLES */
 
 const cardStyle = {
   background: "white",
   border: "1px solid #e2e8f0",
   borderRadius: "16px",
   padding: "22px",
-  boxShadow:
-    "0 5px 18px rgba(15, 23, 42, 0.05)",
+  boxShadow: "0 5px 18px rgba(15, 23, 42, 0.05)",
 };
 
 const headingStyle = {
@@ -925,6 +726,36 @@ const sectionHeaderStyle = {
   justifyContent: "space-between",
   alignItems: "center",
   gap: "15px",
+};
+
+const emptyStyle = {
+  marginTop: "22px",
+  padding: "30px",
+  textAlign: "center" as const,
+  background: "#f8fafc",
+  borderRadius: "14px",
+  color: "#64748b",
+};
+
+const serviceIconStyle = {
+  width: "55px",
+  height: "55px",
+  borderRadius: "14px",
+  background: "#eff6ff",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: "27px",
+};
+
+const refreshButtonStyle = {
+  background: "#eff6ff",
+  color: "#2563eb",
+  border: "none",
+  padding: "9px 14px",
+  borderRadius: "8px",
+  fontWeight: "bold",
+  cursor: "pointer",
 };
 
 /* STAT CARD */
@@ -947,8 +778,7 @@ function StatCard({
         border: "1px solid #e2e8f0",
         borderRadius: "16px",
         padding: "22px",
-        boxShadow:
-          "0 5px 18px rgba(15, 23, 42, 0.05)",
+        boxShadow: "0 5px 18px rgba(15, 23, 42, 0.05)",
       }}
     >
       <div
@@ -972,13 +802,7 @@ function StatCard({
         >
           {icon}
         </div>
-
-        <span
-          style={{
-            color: "#94a3b8",
-            fontSize: "12px",
-          }}
-        >
+        <span style={{ color: "#94a3b8", fontSize: "12px" }}>
           2026
         </span>
       </div>
@@ -992,13 +816,7 @@ function StatCard({
         {value}
       </h2>
 
-      <strong
-        style={{
-          fontSize: "14px",
-        }}
-      >
-        {title}
-      </strong>
+      <strong style={{ fontSize: "14px" }}>{title}</strong>
 
       <p
         style={{
@@ -1033,10 +851,7 @@ function InfoBox({
         padding: "13px",
       }}
     >
-      <div style={{ fontSize: "17px" }}>
-        {icon}
-      </div>
-
+      <div style={{ fontSize: "17px" }}>{icon}</div>
       <div
         style={{
           marginTop: "6px",
@@ -1046,7 +861,6 @@ function InfoBox({
       >
         {label}
       </div>
-
       <strong
         style={{
           display: "block",
@@ -1125,13 +939,7 @@ function BookingRow({
           >
             {service}
           </strong>
-
-          <span
-            style={{
-              color: "#64748b",
-              fontSize: "12px",
-            }}
-          >
+          <span style={{ color: "#64748b", fontSize: "12px" }}>
             {date} • {time}
           </span>
         </div>
@@ -1168,18 +976,13 @@ function ActionButton({
 }) {
   return (
     <button
+      type="button"
       style={{
         width: "100%",
         textAlign: "left",
-        border: primary
-          ? "none"
-          : "1px solid #e2e8f0",
-        background: primary
-          ? "#2563eb"
-          : "#f8fafc",
-        color: primary
-          ? "white"
-          : "#0f172a",
+        border: primary ? "none" : "1px solid #e2e8f0",
+        background: primary ? "#2563eb" : "#f8fafc",
+        color: primary ? "white" : "#0f172a",
         padding: "14px",
         borderRadius: "11px",
         cursor: "pointer",
@@ -1193,9 +996,7 @@ function ActionButton({
           width: "38px",
           height: "38px",
           borderRadius: "9px",
-          background: primary
-            ? "rgba(255,255,255,0.15)"
-            : "#eff6ff",
+          background: primary ? "rgba(255,255,255,0.15)" : "#eff6ff",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -1214,14 +1015,11 @@ function ActionButton({
         >
           {title}
         </strong>
-
         <small
           style={{
             display: "block",
             marginTop: "3px",
-            color: primary
-              ? "#dbeafe"
-              : "#64748b",
+            color: primary ? "#dbeafe" : "#64748b",
           }}
         >
           {subtitle}
@@ -1275,7 +1073,6 @@ function Notification({
         >
           {text}
         </p>
-
         <small
           style={{
             display: "block",
@@ -1312,12 +1109,7 @@ function ActivityBar({
         gap: "8px",
       }}
     >
-      <span
-        style={{
-          fontSize: "11px",
-          color: "#64748b",
-        }}
-      >
+      <span style={{ fontSize: "11px", color: "#64748b" }}>
         {value}
       </span>
 
@@ -1325,20 +1117,14 @@ function ActivityBar({
         style={{
           width: "100%",
           maxWidth: "55px",
-          height: height,
+          height,
           minHeight: "25px",
-          background:
-            "linear-gradient(to top, #2563eb, #60a5fa)",
+          background: "linear-gradient(to top, #2563eb, #60a5fa)",
           borderRadius: "8px 8px 3px 3px",
         }}
       />
 
-      <span
-        style={{
-          fontSize: "11px",
-          color: "#64748b",
-        }}
-      >
+      <span style={{ fontSize: "11px", color: "#64748b" }}>
         {day}
       </span>
     </div>
