@@ -1,5 +1,7 @@
+
 import { useState } from "react";
 import Dashboard from "./Dashboard";
+import Login from "./Login";
 
 interface Service {
   id: number;
@@ -35,17 +37,36 @@ const services: Service[] = [
   },
 ];
 
-const timeSlots = [
-  "10:00 AM",
-  "12:00 PM",
-  "2:00 PM",
-  "4:00 PM",
-];
+const timeSlots = ["10:00 AM", "12:00 PM", "2:00 PM", "4:00 PM"];
+
+const API_URL = "https://san-task8-service-booking.onrender.com";
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: "8px",
+  boxSizing: "border-box",
+  fontSize: "15px",
+};
+
+const primaryButton: React.CSSProperties = {
+  background: "#2563eb",
+  color: "white",
+  border: "none",
+  padding: "13px 22px",
+  borderRadius: "8px",
+  cursor: "pointer",
+  fontWeight: "bold",
+  fontSize: "15px",
+};
 
 function App() {
+  const [token, setToken] = useState("");
+  const [loggedInName, setLoggedInName] = useState("");
+
   const [selectedService, setSelectedService] =
     useState<Service | null>(null);
-
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedTime, setSelectedTime] = useState("");
 
@@ -55,28 +76,34 @@ function App() {
 
   const [showReview, setShowReview] = useState(false);
   const [validationError, setValidationError] = useState("");
-
   const [confirmed, setConfirmed] = useState(false);
   const [bookingError, setBookingError] = useState("");
   const [isBooking, setIsBooking] = useState(false);
-
   const [showDashboard, setShowDashboard] = useState(false);
 
   function continueToReview() {
+    if (!selectedService) {
+      setValidationError("Please select a service.");
+      return;
+    }
+
+    if (!selectedDate) {
+      setValidationError("Please select a date.");
+      return;
+    }
+
+    if (!selectedTime) {
+      setValidationError("Please select a time.");
+      return;
+    }
+
     if (!name.trim()) {
       setValidationError("Please enter your full name.");
       return;
     }
 
-    if (!phone.trim()) {
-      setValidationError("Please enter your phone number.");
-      return;
-    }
-
-    if (!/^\d{10}$/.test(phone)) {
-      setValidationError(
-        "Please enter a valid 10-digit phone number."
-      );
+    if (!/^\d{10}$/.test(phone.trim())) {
+      setValidationError("Please enter a valid 10-digit phone number.");
       return;
     }
 
@@ -88,53 +115,6 @@ function App() {
     setValidationError("");
     setBookingError("");
     setShowReview(true);
-  }
-
-  async function confirmBooking() {
-    if (!selectedService) {
-      return;
-    }
-
-    setIsBooking(true);
-    setBookingError("");
-
-    try {
-      const response = await fetch(
-        "https://san-task8-service-booking.onrender.com/api/bookings",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            customer_name: name,
-            phone: phone,
-            service: selectedService.name,
-            booking_date: selectedDate,
-            booking_time: convertTimeTo24Hour(selectedTime),
-            address: address,
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          data.message || "Failed to create booking"
-        );
-      }
-
-      setConfirmed(true);
-    } catch (error) {
-      console.error(error);
-
-      setBookingError(
-        "Unable to save the booking. Please make sure the backend is running."
-      );
-    } finally {
-      setIsBooking(false);
-    }
   }
 
   function convertTimeTo24Hour(time: string) {
@@ -154,20 +134,89 @@ function App() {
     ).padStart(2, "0")}:00`;
   }
 
+  async function confirmBooking() {
+    if (!selectedService || !token) {
+      setBookingError("Please log in before booking.");
+      return;
+    }
+
+    setIsBooking(true);
+    setBookingError("");
+
+    try {
+      const response = await fetch(`${API_URL}/api/bookings`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          customer_name: name.trim(),
+          phone: phone.trim(),
+          service: selectedService.name,
+          booking_date: selectedDate,
+          booking_time: convertTimeTo24Hour(selectedTime),
+          address: address.trim(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || "Failed to create booking."
+        );
+      }
+
+      setConfirmed(true);
+    } catch (error) {
+      console.error("Booking error:", error);
+      setBookingError(
+        error instanceof Error
+          ? error.message
+          : "Unable to save your booking. Please try again."
+      );
+    } finally {
+      setIsBooking(false);
+    }
+  }
+
   function startNewBooking() {
     setSelectedService(null);
     setSelectedDate("");
     setSelectedTime("");
-    setName("");
+    setName(loggedInName);
     setPhone("");
     setAddress("");
     setShowReview(false);
     setValidationError("");
     setBookingError("");
     setConfirmed(false);
+    setShowDashboard(false);
   }
 
-  // DASHBOARD
+  function logout() {
+    setToken("");
+    setLoggedInName("");
+    setShowDashboard(false);
+    startNewBooking();
+    setName("");
+  }
+
+  // Require login before showing the booking application.
+  if (!token) {
+    return (
+      <Login
+        onLogin={(receivedToken, userName) => {
+          setToken(receivedToken);
+          setLoggedInName(userName);
+          setName(userName);
+        }}
+      />
+    );
+  }
+
+  // Dashboard
   if (showDashboard) {
     return (
       <div
@@ -177,36 +226,49 @@ function App() {
           fontFamily: "Arial, sans-serif",
         }}
       >
-        <div
+        <header
           style={{
             padding: "20px 30px",
             background: "#1e293b",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "12px",
+            flexWrap: "wrap",
           }}
         >
           <button
             onClick={() => setShowDashboard(false)}
             style={{
+              ...primaryButton,
               background: "white",
               color: "#1e293b",
-              border: "none",
-              padding: "10px 18px",
-              borderRadius: "8px",
-              cursor: "pointer",
-              fontWeight: "bold",
             }}
           >
             ← Back to Home
           </button>
-        </div>
+
+          <button
+            onClick={logout}
+            style={{
+              ...primaryButton,
+              background: "#e2e8f0",
+              color: "#1e293b",
+            }}
+          >
+            Logout
+          </button>
+        </header>
 
         <Dashboard
-          customerName={name.trim() || "Customer"}
+          customerName={loggedInName || "Customer"}
+          token={token}
         />
       </div>
     );
   }
 
-  // CONFIRMATION
+  // Booking confirmation
   if (confirmed && selectedService) {
     return (
       <div
@@ -230,25 +292,15 @@ function App() {
             padding: "40px",
             textAlign: "center",
             border: "1px solid #e2e8f0",
-            boxShadow:
-              "0 8px 25px rgba(15, 23, 42, 0.08)",
+            boxShadow: "0 8px 25px rgba(15, 23, 42, 0.08)",
+            boxSizing: "border-box",
           }}
         >
-          <div
-            style={{
-              fontSize: "55px",
-              marginBottom: "15px",
-            }}
-          >
+          <div style={{ fontSize: "55px", marginBottom: "15px" }}>
             ✅
           </div>
 
-          <h1
-            style={{
-              fontSize: "36px",
-              marginBottom: "12px",
-            }}
-          >
+          <h1 style={{ fontSize: "36px", marginBottom: "12px" }}>
             Booking Confirmed!
           </h1>
 
@@ -272,22 +324,17 @@ function App() {
             }}
           >
             <p>
-              <strong>Service:</strong>{" "}
-              {selectedService.name}
+              <strong>Service:</strong> {selectedService.name}
             </p>
-
             <p>
               <strong>Date:</strong> {selectedDate}
             </p>
-
             <p>
               <strong>Time:</strong> {selectedTime}
             </p>
-
             <p>
               <strong>Name:</strong> {name}
             </p>
-
             <p>
               <strong>Status:</strong> Pending
             </p>
@@ -296,16 +343,9 @@ function App() {
           <button
             onClick={() => setShowDashboard(true)}
             style={{
-              marginTop: "25px",
-              marginRight: "10px",
+              ...primaryButton,
               background: "#1e293b",
-              color: "white",
-              border: "none",
-              padding: "13px 22px",
-              borderRadius: "8px",
-              cursor: "pointer",
-              fontWeight: "bold",
-              fontSize: "15px",
+              margin: "25px 10px 0 0",
             }}
           >
             📊 View Dashboard
@@ -314,15 +354,8 @@ function App() {
           <button
             onClick={startNewBooking}
             style={{
+              ...primaryButton,
               marginTop: "25px",
-              background: "#2563eb",
-              color: "white",
-              border: "none",
-              padding: "13px 22px",
-              borderRadius: "8px",
-              cursor: "pointer",
-              fontWeight: "bold",
-              fontSize: "15px",
             }}
           >
             Book Another Service
@@ -341,7 +374,7 @@ function App() {
         color: "#0f172a",
       }}
     >
-      {/* HEADER */}
+      {/* Header */}
       <header
         style={{
           background: "#1e293b",
@@ -378,21 +411,31 @@ function App() {
           </p>
         </div>
 
-        <button
-          onClick={() => setShowDashboard(true)}
+        <div
           style={{
-            background: "#2563eb",
-            color: "white",
-            border: "none",
-            padding: "12px 20px",
-            borderRadius: "8px",
-            cursor: "pointer",
-            fontWeight: "bold",
-            fontSize: "15px",
+            display: "flex",
+            gap: "10px",
+            flexWrap: "wrap",
           }}
         >
-          📊 Dashboard
-        </button>
+          <button
+            onClick={() => setShowDashboard(true)}
+            style={primaryButton}
+          >
+            📊 Dashboard
+          </button>
+
+          <button
+            onClick={logout}
+            style={{
+              ...primaryButton,
+              background: "#e2e8f0",
+              color: "#1e293b",
+            }}
+          >
+            Logout ({loggedInName})
+          </button>
+        </div>
       </header>
 
       <main
@@ -402,9 +445,8 @@ function App() {
           padding: "40px 20px",
         }}
       >
-        {/* STEP 1 */}
+        {/* Step 1: Select service */}
         <h2>1. Choose a Service</h2>
-
         <p style={{ color: "#64748b" }}>
           Select the service you want to book.
         </p>
@@ -451,7 +493,7 @@ function App() {
                   setSelectedService(service);
                   setSelectedDate("");
                   setSelectedTime("");
-                  setName("");
+                  setName(loggedInName);
                   setPhone("");
                   setAddress("");
                   setShowReview(false);
@@ -460,14 +502,9 @@ function App() {
                   setConfirmed(false);
                 }}
                 style={{
+                  ...primaryButton,
                   width: "100%",
-                  background: "#2563eb",
-                  color: "white",
-                  border: "none",
                   padding: "12px",
-                  borderRadius: "8px",
-                  cursor: "pointer",
-                  fontWeight: "bold",
                 }}
               >
                 Select Service
@@ -476,7 +513,7 @@ function App() {
           ))}
         </div>
 
-        {/* STEP 2 */}
+        {/* Step 2: Date and time */}
         {selectedService && (
           <section
             style={{
@@ -487,11 +524,10 @@ function App() {
               border: "1px solid #e2e8f0",
             }}
           >
-            <h2>2. Choose Date & Time</h2>
+            <h2>2. Choose Date &amp; Time</h2>
 
             <p style={{ color: "#64748b" }}>
-              Booking:{" "}
-              <strong>{selectedService.name}</strong>
+              Booking: <strong>{selectedService.name}</strong>
             </p>
 
             <label
@@ -514,12 +550,8 @@ function App() {
               }}
               min={new Date().toISOString().split("T")[0]}
               style={{
-                width: "100%",
+                ...inputStyle,
                 maxWidth: "300px",
-                padding: "12px",
-                border: "1px solid #cbd5e1",
-                borderRadius: "8px",
-                boxSizing: "border-box",
               }}
             />
 
@@ -543,13 +575,9 @@ function App() {
                   }}
                   style={{
                     background:
-                      selectedTime === time
-                        ? "#2563eb"
-                        : "#f1f5f9",
+                      selectedTime === time ? "#2563eb" : "#f1f5f9",
                     color:
-                      selectedTime === time
-                        ? "white"
-                        : "#0f172a",
+                      selectedTime === time ? "white" : "#0f172a",
                     border: "1px solid #cbd5e1",
                     padding: "11px 18px",
                     borderRadius: "8px",
@@ -564,7 +592,7 @@ function App() {
           </section>
         )}
 
-        {/* STEP 3 */}
+        {/* Step 3: Customer details */}
         {selectedService && selectedDate && selectedTime && (
           <section
             style={{
@@ -609,13 +637,7 @@ function App() {
                     setShowReview(false);
                   }}
                   placeholder="Enter your full name"
-                  style={{
-                    width: "100%",
-                    padding: "12px",
-                    border: "1px solid #cbd5e1",
-                    borderRadius: "8px",
-                    boxSizing: "border-box",
-                  }}
+                  style={inputStyle}
                 />
               </div>
 
@@ -640,13 +662,7 @@ function App() {
                   }}
                   placeholder="Enter your 10-digit phone number"
                   maxLength={10}
-                  style={{
-                    width: "100%",
-                    padding: "12px",
-                    border: "1px solid #cbd5e1",
-                    borderRadius: "8px",
-                    boxSizing: "border-box",
-                  }}
+                  style={inputStyle}
                 />
               </div>
 
@@ -671,11 +687,7 @@ function App() {
                   placeholder="Enter your address"
                   rows={4}
                   style={{
-                    width: "100%",
-                    padding: "12px",
-                    border: "1px solid #cbd5e1",
-                    borderRadius: "8px",
-                    boxSizing: "border-box",
+                    ...inputStyle,
                     resize: "vertical",
                   }}
                 />
@@ -684,6 +696,7 @@ function App() {
 
             {validationError && (
               <div
+                role="alert"
                 style={{
                   marginTop: "20px",
                   background: "#fef2f2",
@@ -700,15 +713,8 @@ function App() {
             <button
               onClick={continueToReview}
               style={{
+                ...primaryButton,
                 marginTop: "25px",
-                background: "#2563eb",
-                color: "white",
-                border: "none",
-                padding: "13px 22px",
-                borderRadius: "8px",
-                cursor: "pointer",
-                fontWeight: "bold",
-                fontSize: "15px",
               }}
             >
               Continue to Review
@@ -716,7 +722,7 @@ function App() {
           </section>
         )}
 
-        {/* STEP 4 */}
+        {/* Step 4: Review booking */}
         {showReview && selectedService && (
           <section
             style={{
@@ -725,15 +731,14 @@ function App() {
               borderRadius: "14px",
               padding: "30px",
               border: "1px solid #e2e8f0",
-              boxShadow:
-                "0 5px 18px rgba(15, 23, 42, 0.06)",
+              boxShadow: "0 5px 18px rgba(15, 23, 42, 0.06)",
             }}
           >
             <h2>4. Review Your Booking</h2>
 
             <p style={{ color: "#64748b" }}>
-              Please check all the information before
-              confirming your booking.
+              Please check all the information before confirming your
+              booking.
             </p>
 
             <div
@@ -745,31 +750,23 @@ function App() {
               }}
             >
               <div>
-                <strong>Service:</strong>{" "}
-                {selectedService.name}
+                <strong>Service:</strong> {selectedService.name}
               </div>
-
               <div>
-                <strong>Duration:</strong>{" "}
-                {selectedService.duration}
+                <strong>Duration:</strong> {selectedService.duration}
               </div>
-
               <div>
                 <strong>Date:</strong> {selectedDate}
               </div>
-
               <div>
                 <strong>Time:</strong> {selectedTime}
               </div>
-
               <div>
                 <strong>Name:</strong> {name}
               </div>
-
               <div>
                 <strong>Phone:</strong> {phone}
               </div>
-
               <div>
                 <strong>Address:</strong> {address}
               </div>
@@ -777,6 +774,7 @@ function App() {
 
             {bookingError && (
               <div
+                role="alert"
                 style={{
                   marginTop: "20px",
                   background: "#fef2f2",
@@ -794,24 +792,13 @@ function App() {
               onClick={confirmBooking}
               disabled={isBooking}
               style={{
+                ...primaryButton,
                 marginTop: "25px",
-                background: isBooking
-                  ? "#94a3b8"
-                  : "#16a34a",
-                color: "white",
-                border: "none",
-                padding: "13px 22px",
-                borderRadius: "8px",
-                cursor: isBooking
-                  ? "not-allowed"
-                  : "pointer",
-                fontWeight: "bold",
-                fontSize: "15px",
+                background: isBooking ? "#94a3b8" : "#16a34a",
+                cursor: isBooking ? "not-allowed" : "pointer",
               }}
             >
-              {isBooking
-                ? "Saving Booking..."
-                : "Confirm Booking"}
+              {isBooking ? "Saving Booking..." : "Confirm Booking"}
             </button>
           </section>
         )}
